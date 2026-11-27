@@ -30,11 +30,17 @@ Implementation plan: `dev/docs/task-stage1.md`. Start at ticket **RP-001**.
   (`registry`), который перечисляет доступные элементы вместе с их JSON-схемой конфигурации и ссылкой
   на раздел LaTeX. Этот реестр — то, что позже будет читать GUI; специальной работы под GUI сейчас
   не делается.
-- **Порядок усложнения модели динамики задан пользователем: точечная масса → 2D → 3D** (§5.4).
-  В переводе на код: `rhs_point.py` (поступательное движение без ориентации, одна и та же функция для
-  1/2/3 пространственных измерений) → `rhs_planar.py` (плоская задача с тангажом — первая модель, где
-  вообще появляется устойчивость) → `rhs_6dof.py` (полные 6 степеней свободы с кватернионом).
-  Неоднозначность слова «2D» помечена в §5.4 — взято наиболее естественное чтение, не заблокировано.
+- **Сейчас в работе ровно одна модель динамики — M1 (§5.4, §5.4.1): точечная масса, «гравитационный
+  разворот» без подъёмной силы.** Ориентация в ней есть, но она **кинематически производная**:
+  тяга и сопротивление строго по вектору скорости, угол атаки тождественно нулевой, уравнения
+  вращения нет вообще. Угол наклона траектории θ меняется только из-за нормальной составляющей
+  тяжести: `dθ/dt = -g·cos θ / V`, `dV/dt = (T - D)/m - g·sin θ`. Состояние —
+  `pos(d), V, θ[, ψ], mass`, а не декартово `(pos, vel)`: так θ нельзя спутать с вращательной
+  степенью свободы. **Это не модель с «замороженной» ориентацией** — та держала бы θ постоянным
+  независимо от скорости, что сразу даёт ненулевой угол атаки и подъёмную силу.
+- **M2 (2D с собственным уравнением моментов) и M3 (6 степеней свободы) — отложены.** Их описание в
+  §5.4 оставлено как заготовка на будущее, чтобы раскладки состояний и швы их выдержали, но
+  `developer` их не начинает: пользователь попросит M2 отдельно, когда M1 будет готов и проверен.
 - **LaTeX ведёт за собой код:** `docs/models/<модель>.tex` соответствует
   `src/rocket_physics/models/<модель>/` один к одному; каждая реализованная формула имеет метку
   `\label{eq:<модель>:<имя>}`, а функция в коде — строку `Implements: eq:<модель>:<имя>`. Скрипт
@@ -50,9 +56,10 @@ Implementation plan: `dev/docs/task-stage1.md`. Start at ticket **RP-001**.
   **код** — нигде и никогда (I6 в §4.3).
 - **HTTP/RPC и GUI не делаются и даже не «закладываются»** — по решению пользователя «API» здесь
   означает ровно импортируемый пакет. Будущий GUI — такой же внешний потребитель, как `fx27`.
-- **Открыт один нетупиковый вопрос** (§12, п. 11): из какого источника брать эталонные числа для
-  `tests/validation/fx27/` — выгрузки OpenRocket (в fx27 лежат 4 файла `.ork`), результаты порта v1,
-  или телеметрия реального полёта. RP-001…RP-008 этого не ждут; нужно к RP-009.
+- **Сверка с чужими моделями отложена** (решение пользователя 2026-11-27: «dont compare against other
+  model. just go with it… at some point we will compare but it shouldn't be this necessary»).
+  RP-009 понижен в приоритете, выбирать источник эталонных чисел сейчас не нужно. M1 проверяется
+  аналитическим решением, а не чужой моделью, — этого достаточно.
 
 ## Table of contents
 
@@ -225,8 +232,8 @@ editing in place; *deep* = much behaviour behind a small interface.
          ┌──────────▼──────────────┐   ┌───────────▼─────────────────────┐
   L2     │  dynamics/              │   │  numerics/                      │
          │  frames, quaternion,    │   │  integrator protocol, rk4       │
-         │  rhs_point -> rhs_planar│   │  (vectorised), scipy adapter,   │
-         │  -> rhs_6dof   (§5.4)   │   │  events, step grid, sampling    │
+         │  rhs_point  (M1, only   │   │  (vectorised), scipy adapter,   │
+         │  model in scope — §5.4) │   │  events, step grid, sampling    │
          │  (assembles models      │   │  — model-agnostic               │
          │   into one RHS)         │   │                                 │
          └──────────┬──────────────┘   └─────────────────────────────────┘
@@ -382,19 +389,75 @@ Translated to concrete models, state layouts and ticket order:
 
 | # | Model | Module | State layout (per member) | What it adds | First ticket |
 |---|---|---|---|---|---|
-| M1 | **Point mass** — translational only, no attitude | `dynamics/rhs_point.py` | `pos(d), vel(d), mass` where `d ∈ {1,2,3}` spatial components | Thrust, gravity, drag along the velocity vector, mass depletion. No rotation, no angle of attack, no moments. | RP-008 |
-| M2 | **2D — pitch-plane rigid body** | `dynamics/rhs_planar.py` | `pos(2), vel(2), pitch, pitch_rate, mass` → 7 | Attitude. Angle of attack, normal force, aerodynamic moment, pitch inertia, centre of pressure vs centre of gravity, **static margin** — the first model in which the word "stability" means anything. Rail-constrained launch becomes expressible. | RP-011 |
-| M3 | **3D — full 6-DOF rigid body** | `dynamics/rhs_6dof.py` | `pos(3), vel(3), quat(4), omega(3), mass` → 14 | Three-axis rotation via quaternion, full inertia tensor, roll and roll damping, fin cant, 3D wind and crosswind weathercocking, lateral drift and landing dispersion. | RP-012 |
+| # | Model | Module | State layout (per member) | What it adds | Ticket |
+|---|---|---|---|---|---|
+| **M1** | **Point mass, zero-lift gravity turn** — attitude is present but *kinematically derived*; there is no rotational equation | `dynamics/rhs_point.py` | **flight-path-angle parameterisation** — `pos(d), V, θ[, ψ], mass` (§5.4.1) | Thrust and drag exactly along the velocity vector; flight-path angle evolving from gravity's normal component; mass depletion. No lift, no side force, no angle of attack, no moment, **no torque equation**. | **RP-008 — the only dynamics model in scope now** |
+| M2 | 2D — pitch-plane rigid body | `dynamics/rhs_planar.py` | `pos(2), vel(2), pitch, pitch_rate, mass` → 7 | *Independent* attitude: angle of attack, normal force, aerodynamic moment, pitch inertia, CP vs CG, **static margin**. Rail-constrained launch becomes expressible. | RP-011 — **DEFERRED** |
+| M3 | 3D — full 6-DOF rigid body | `dynamics/rhs_6dof.py` | `pos(3), vel(3), quat(4), omega(3), mass` → 14 | Three-axis rotation via quaternion, full inertia tensor, roll and roll damping, fin cant, 3D wind and crosswind weathercocking, lateral drift and landing dispersion. | RP-012 — **DEFERRED** |
 
-Why this is the right increment sequence and not an arbitrary one:
+**Scope right now: M1 only.** M2 and M3 are described above as a forward note so the state-layout and
+seam design accommodates them, **but the developer must not start them.** The user will ask for M2
+explicitly once M1 is built and validated. See `task-stage1.md`.
 
-- **M1 is dimension-parametric, which dissolves most of the ambiguity in the user's wording.** A
-  point-mass right-hand side is `dv/dt = (T + D + G)/m` — vector algebra that is identical in 1, 2 or
-  3 spatial components. One implementation, with `d` a layout parameter, covers "vertical ascent",
-  "planar point mass" and "3D point mass". So *no work is thrown away* and the step to M2 is a real
-  step rather than a re-parametrisation.
-- **M2 therefore means "attitude arrives", not merely "two spatial dimensions."** That is the reading
-  taken — see the ambiguity note below.
+### 5.4.1 M1 in detail — zero-lift gravity turn (corrected 2026-11-27)
+
+Correcting an earlier, wrong characterisation of M1 in this document ("translational only, no
+attitude"). **M1 does carry attitude** — it is just not a dynamical variable.
+
+The physical picture the user specified: an undisturbed trajectory with **zero lift and zero side
+force**, thrust and drag acting **exactly along the velocity vector**. The vehicle's orientation is
+therefore identical to its velocity direction at all times, so the flight-path angle θ (angle of the
+velocity vector above the horizontal) is a **derived kinematic quantity**, not a rotational state. It
+changes only because gravity has a component normal to the velocity:
+
+```
+dV/dt = (T - D)/m - g·sin(θ)          # along the velocity vector
+dθ/dt = -g·cos(θ) / V                 # normal to it — gravity turn, no torque involved
+dx/dt =  V·cos(θ)·cos(ψ)
+dy/dt =  V·cos(θ)·sin(ψ)              # (3D only)
+dh/dt =  V·sin(θ)
+dψ/dt =  0                            # no side force ⇒ heading is constant
+dm/dt = -ṁ(t)
+```
+
+This is the classical zero-lift gravity-turn point-mass formulation.
+
+**It is explicitly NOT a frozen- or fixed-attitude model, and the distinction is the whole point.**
+A frozen-attitude model holds θ *constant* regardless of where the velocity vector points, which
+immediately implies a non-zero angle of attack and therefore a lift force the model then ignores —
+physically inconsistent. M1 instead lets θ *follow* the velocity, so α ≡ 0 by construction and
+"zero lift" is an identity rather than an assumption bolted on afterwards. (For the record: v1's fx27
+port used a frozen-attitude model — a different thing, listed as the optional M2.5 below.)
+
+Consequences binding on the implementation:
+
+- **State layout is `pos(d), V, θ[, ψ], mass`, not Cartesian `(pos, vel)`.** The two are
+  mathematically equivalent for this force model, but the parameterisation is chosen deliberately:
+  θ and ψ are then *named state variables* that a reader (or a later agent) cannot mistake for a
+  rotational-dynamics state, and the gravity-turn equation appears in the code in the same form as in
+  the LaTeX. `n_state` = `d + 3` for `d = 1, 2` and `d + 4` for `d = 3`.
+  - `d = 1` — vertical ascent: θ ≡ π/2, the dθ/dt equation drops out, state is `h, V, mass`.
+  - `d = 2` — planar gravity turn: `x, h, V, θ, mass` → 5.
+  - `d = 3` — ψ present but constant (no side force), so the trajectory stays in one vertical plane:
+    `x, y, h, V, θ, ψ, mass` → 7. Worth stating in the docstring that 3D here buys *orientation of
+    the plane*, not out-of-plane motion.
+- **`dθ/dt` is singular at V = 0** — which is exactly the state at ignition, and near-exactly the
+  state at a vertical apogee. The RHS must handle it (guard on V below a declared threshold and hold
+  θ, consistent with §10's "the RHS must never raise on out-of-domain input"), and there must be a
+  test for it. This is the one real numerical trap in M1 and it is the reason the docstring, not just
+  the code, has to say what happens there.
+- `θ` must be exposed through a named `Trajectory` accessor (`traj.flight_path_angle`) with a
+  docstring stating it is kinematic. When M2 later introduces a genuine `pitch` state, the two must
+  be separately named and never conflated — at M2 they differ exactly by the angle of attack.
+
+Why this sequence is the right increment and not an arbitrary one:
+
+- **M1 is dimension-parametric**, so one implementation covers vertical ascent, the planar gravity
+  turn and the 3D case. No work is thrown away, and the step to M2 is a real step rather than a
+  re-parametrisation.
+- **M2 is where attitude becomes *dynamical*** — an independent state with its own moment equation —
+  not where attitude first appears. That is the honest description of the increment: M1 → M2 adds the
+  torque equation and with it α ≠ 0, lift, and everything "stability" means.
 - **M3 is a strict superset of M2** in physics, but *not* in state layout (quaternion vs scalar pitch),
   which is precisely why `State` is a layout descriptor and metrics are written against named
   accessors rather than raw column indices (§5.2). A metric written for M2 keeps working on M3.
@@ -403,26 +466,23 @@ Why this is the right increment sequence and not an arbitrary one:
   pitch plane must reproduce the planar run) — that last one is a free, strong regression test and it
   only exists because the progression is layered this way.
 
-**Ambiguity, flagged rather than silently resolved (per the coordinator's instruction).** "2D" has two
-plausible readings:
+**Residual ambiguity in M2/M3 — flagged, and now irrelevant to current work** since only M1 is in
+scope. Recorded so it is not re-derived when M2 is eventually asked for:
 
-- **(a) planar point mass** — 2 spatial dimensions, still no attitude;
-- **(b) planar rigid body** — attitude in the plane (pitch), angle of attack, moments. **Taken.**
+- **"2D" is read as a planar rigid body** — pitch as an independent state with its own moment
+  equation, α ≠ 0, lift. Not "a planar point mass": M1's `d = 2` case already *is* a planar point
+  mass, so that reading would make the 2D step a no-op. The project's own description, "trajectory
+  **and stability** simulation", is unreachable without a torque equation, and M2 is the natural
+  place for it to arrive.
+- **"3D" is read as full 6-DOF.** v1's own fx27 port deliberately chose an intermediate
+  *frozen-attitude* rigid body ("Option C" at a user gate, per
+  `fx27/simulation-1/rocket_physics_port/README.md`) — a 3D translational model holding a
+  non-rotating attitude state. Note that this is a **different model from M1**, despite both being
+  called "point mass" loosely: a frozen attitude implies α ≠ 0 and therefore a lift force (see
+  §5.4.1), whereas M1's α ≡ 0 by construction. If fx27 turns out to need the frozen-attitude model,
+  it is an **M2.5** (`dynamics/rhs_frozen.py`), ~1-2 days, inserted between M2 and M3.
 
-Reading (b) is taken for two reasons: under (a) the "2D" step would be a no-op, because M1's
-dimension parameter already covers a planar point mass; and the project's own description is
-"trajectory **and stability** simulation", which is unreachable without attitude — so attitude has to
-enter at some step, and the middle step is the only natural place. If the user meant (a), the fix is
-cheap and local: M1 already covers it, and M2 simply becomes the 3-DOF-planar-with-pitch model under
-a different label.
-
-Similarly flagged: **"3D" is read as full 6-DOF.** v1's own fx27 port deliberately chose an
-intermediate *frozen-attitude* rigid body ("Option C" at a user gate, per
-`fx27/simulation-1/rocket_physics_port/README.md`) — a 3D translational model carrying a non-rotating
-attitude state. If fx27 needs that specific model rather than full 6-DOF, it is an **M2.5**
-(`dynamics/rhs_frozen.py`) between M2 and M3, roughly 1-2 days, and it does not disturb anything
-above or below. Worth one sentence of confirmation from the user before RP-012 starts; it does not
-block RP-001…RP-011.
+Both are questions for whenever the user asks for M2; neither blocks RP-001…RP-008.
 
 ## 6. Public interface (the "API")
 
@@ -523,11 +583,12 @@ rocket-physics-2/
 │       │
 │       ├── dynamics/           # L2  equations of motion: models -> one RHS   (rollout: §5.4)
 │       │   ├── frames.py       #     ENU / body / rail frame definitions and transforms
-│       │   ├── quaternion.py   #     (needed only from M3)
-│       │   ├── forces.py       #     force & moment assembly from model outputs
-│       │   ├── rhs_point.py    #  M1 point mass, dimension-parametric (d = 1|2|3), no attitude
-│       │   ├── rhs_planar.py   #  M2 "2D": pitch-plane rigid body — attitude, moments, margin
-│       │   └── rhs_6dof.py     #  M3 "3D": full 6-DOF rigid body (quaternion, inertia tensor)
+│       │   ├── forces.py       #     force assembly from model outputs
+│       │   ├── rhs_point.py    #  M1 point mass, zero-lift gravity turn — THE ONLY MODEL IN
+│       │   │                   #     SCOPE NOW. State pos(d), V, theta[, psi], mass; attitude
+│       │   │                   #     kinematic, no torque equation (§5.4.1)
+│       │   ├── rhs_planar.py   #  M2 DEFERRED — "2D" pitch-plane rigid body
+│       │   ├── rhs_6dof.py     #  M3 DEFERRED — "3D" full 6-DOF (would add quaternion.py)
 │       │                       #     (optional M2.5 rhs_frozen.py only if fx27 needs it — §5.4)
 │       │
 │       ├── numerics/           # L2  ── SEAM 2 ── integration, model-agnostic
@@ -827,8 +888,14 @@ Consequences now binding on implementation:
 4. `tests/data/demo_rocket.toml` stays a *generic* fixture for config/unit tests; real fx27 artefacts
    live under `tests/validation/fx27/data/`. Two jobs, two homes, no overlap.
 
-**Still needed before RP-009 (not blocking RP-001…RP-008):** *which oracle* supplies the reference
-numbers. Candidates found in `D:/Projects - Ongoing/fx27`: the 4 OpenRocket files in `open-rocket/`
+**Superseded 2026-11-27 — comparison deferred.** The user's instruction: *"dont compare against other
+model. just go with it… at some point we will compare but it shouldn't be this necessary."* So the
+approved shape above stands as the *eventual* design, but **RP-009 is deferred and low-priority, and
+no oracle needs picking now.** M1 is checked against its closed-form solution — a stronger test than
+agreement with another simulator. The inventory below is retained only so the groundwork is not
+redone later; nothing in stage 1 acts on it.
+
+Candidates found in `D:/Projects - Ongoing/fx27`: the 4 OpenRocket files in `open-rocket/`
 (`fx27_cspace_01_03.ork`, `fx27_cspace_02_01.ork`, `fx27_cspace_03_01.ork`, `fx27_euroc_01_03.ork`);
 outputs of v1's port (`simulation-1/rocket_physics_port/runs/`, 7 entry points over the `cspace` and
 `euroc` campaigns, with real motor CSVs under `data/motors/`); the `rocketpy`-based original
@@ -843,10 +910,12 @@ the state-layout design.
 
 Not a fork I offered — the user supplied their own progression verbatim ("first we start with point
 mass, then 2D, then 3D"), which is a different cut from the three models I had listed (3DOF point
-mass / frozen-attitude rigid body / full 6DOF). The translation into concrete modules, state layouts,
-the justification for the sequence, and the two flagged ambiguities ("2D" = planar rigid body with
-attitude, not planar point mass; "3D" = full 6-DOF, with v1's frozen-attitude model available as an
-optional M2.5) are in **§5.4**. Ticket order follows it: RP-008 (M1) → RP-011 (M2) → RP-012 (M3).
+mass / frozen-attitude rigid body / full 6DOF). The translation into concrete modules and state
+layouts is in **§5.4**, with M1's formulation corrected by the user and detailed in **§5.4.1**.
+
+**Scope narrowed 2026-11-27 (user): implement M1 only.** M2 and M3 stay documented as a forward note
+so the design accommodates them, but their tickets (RP-011, RP-012) are **deferred** and must not be
+started. The user will ask for M2 explicitly once M1 is built and validated.
 
 For the record, the progression I would otherwise have proposed — straight to frozen-attitude,
 because that is what v1's fx27 port actually used — is **superseded**. The user's sequence is better
@@ -903,8 +972,12 @@ separate stage with its own architecture round.
 | Rejected | Why |
 |---|---|
 | Dual validation suites: anonymised fixtures here + the real suite in fx27 (my D6b recommendation) | **Rejected by the user.** fx27 has no test suite and will not get one (C8), so there is no second suite to defer to — the duplication layer would cost a permanent keep-two-sets-in-step tax for nothing. One suite, here, real numbers. |
-| "2D" read as a planar *point mass* | Would make the 2D step a no-op: M1's dimension parameter already covers a planar point mass (§5.4). Flagged, not silently assumed. |
-| Starting at frozen-attitude (what v1's fx27 port used) | Superseded by the user's point-mass-first progression, which is better: M1 has a closed-form answer, so the first test checks physics rather than the code's own output. |
+| "Point mass = translational only, no attitude" (my first description of M1) | **Wrong — corrected by the user.** M1 carries attitude as a *derived kinematic* quantity: zero-lift gravity turn, thrust and drag along the velocity vector, `dθ/dt = -g·cos θ / V`, no torque equation. See §5.4.1. |
+| Cartesian `(pos, vel)` state for M1 | Mathematically equivalent for this force model, but it hides θ. The flight-path-angle parameterisation makes θ a named state that cannot be mistaken for a rotational degree of freedom, and matches the LaTeX form. |
+| Frozen/fixed-attitude model for M1 | Explicitly not what the user asked for, and physically inconsistent at this fidelity: holding θ fixed regardless of velocity direction implies α ≠ 0 and therefore a lift force the model ignores. v1's fx27 port used that model; here it would be a separate M2.5. |
+| "2D" read as a planar *point mass* | Would make the 2D step a no-op: M1's `d = 2` case already is a planar point mass (§5.4). |
+| Building M2/M3 now | Scope narrowed by the user: M1 only. They stay documented so the design accommodates them, but their tickets are deferred. |
+| Picking a cross-model oracle now | Deferred by the user ("dont compare against other model. just go with it"). M1's closed-form check is stronger than agreement with another simulator. |
 | Julia core (D1 option C) | Technically the best numerics, but it orphans v1-as-oracle and fx27's existing Python material, and inverts the user's "build around fx27 first" plan. Deferred, not dismissed on merit. |
 | Rust/C++ kernel now (D1 option B) | Premature: no measurement says the inner loop is the bottleneck yet, and it taxes every physics change. Kept reachable behind Seam 2. |
 | Monolithic `schema.py` (v1's 28.4 KB) | Textbook shallow module: a huge interface over thin validation. Split per aggregate (§5.1). |
@@ -936,11 +1009,11 @@ Resolved items are kept, marked, so nobody re-opens them. **Nothing here blocks 
    repo — both now fx27-side housekeeping, irrelevant to this repo's architecture. The dependency is
    an editable path install either way, D6a.)*
 5. ~~Which dynamics model first — point mass, frozen-attitude, or 6DOF?~~ **RESOLVED 2026-11-27
-   (D7, user-specified):** point mass → 2D → 3D. Translated in §5.4. Two residual ambiguities are
-   flagged there rather than guessed: "2D" is read as a *planar rigid body with pitch* (not a planar
-   point mass), and "3D" as *full 6-DOF* (with v1's frozen-attitude model available as an optional
-   M2.5 if fx27 turns out to need exactly that). Neither blocks anything before RP-012; one sentence
-   of confirmation from the user would close them.
+   (D7, user-specified, then corrected and narrowed by the user):** point mass → 2D → 3D, and
+   **only M1 is in scope now.** M1's formulation was corrected by the user — it is the zero-lift
+   gravity turn, with attitude as a derived kinematic quantity and no torque equation, explicitly
+   *not* a frozen-attitude model (§5.4.1). M2/M3 readings are recorded in §5.4 for whenever M2 is
+   asked for.
 6. **Is the LaTeX a port of v1's `dev/docs/latex-v2/` or a fresh document?** It already has the exact
    taxonomy and macros proposed in §8. If it is a port, the `docs/` tree should be seeded from it
    (copy, then prune) rather than written blank — and the user should confirm that copying v1's
@@ -956,10 +1029,15 @@ Resolved items are kept, marked, so nobody re-opens them. **Nothing here blocks 
    differential evolution / bisection) covers apogee targeting and airbrake sizing. Gradient-based
    trajectory optimization would favour a differentiable stack (JAX/diffrax, or Julia), which would
    partly re-open D1. Worth one explicit answer now rather than a surprise in stage 3.
-10. **Is `rocketpy` cross-validation wanted?** fx27's original `simulation` is `rocketpy`-based, so a
-    third independent oracle is available cheaply. It would be a dev-only optional dependency.
-11. **Which oracle supplies `tests/validation/fx27/`'s reference numbers?** *(New, created by the D6b
-    override — needed for RP-009, blocks nothing before it.)* Four candidates exist in
+10. ~~Is `rocketpy` cross-validation wanted?~~ **DEFERRED 2026-11-27** — same user decision as item
+    11: no comparison against other models for now.
+11. ~~Which oracle supplies `tests/validation/fx27/`'s reference numbers?~~ **MOOT for now —
+    2026-11-27 (user):** *"dont compare against other model. just go with it… at some point we will
+    compare but it shouldn't be this necessary."* Cross-model comparison is **deferred and
+    low-priority**; RP-009 is downgraded accordingly and **no oracle needs picking now**. M1 is
+    verified against its closed-form solution, which is a stronger check than agreement with another
+    simulator anyway. The inventory below is kept only so that whenever comparison does become
+    wanted, the groundwork is not redone. Four candidates exist in
     `D:/Projects - Ongoing/fx27`: (a) the 4 OpenRocket files in `open-rocket/`; (b) outputs of v1's
     port, `simulation-1/rocket_physics_port/runs/` — 7 entry points over the `cspace`/`euroc`
     campaigns with real motor CSVs; (c) the `rocketpy`-based original `fx27/simulation`; (d) real

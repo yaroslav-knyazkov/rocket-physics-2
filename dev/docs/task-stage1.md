@@ -7,18 +7,21 @@
 
 - Разбивка стадии 1 на тикеты для `developer`. Все архитектурные решения утверждены, гейтов больше
   нет — можно начинать с RP-001.
-- Порядок моделей динамики — по решению пользователя: **точечная масса (RP-008) → 2D с тангажом
-  (RP-011) → полные 6 степеней свободы (RP-012)**.
+- **В работе только M1 — точечная масса, «гравитационный разворот» без подъёмной силы (RP-008).**
+  Ориентация в ней есть, но кинематически производная: тяга и сопротивление строго по вектору
+  скорости, угол атаки тождественно нулевой, уравнения вращения нет. Состояние —
+  `pos(d), V, θ[, ψ], mass`. Формулы и ловушка с особенностью при `V = 0` — в §5.4.1 архитектуры и в
+  самом тикете. Это **не** модель с «замороженной» ориентацией.
+- **RP-009, RP-010, RP-011 (2D), RP-012 (3D) — отложены, начинать нельзя.** Их описания оставлены
+  как заготовки. После RP-008 — доложить и ждать решения пользователя.
 - Сначала инфраструктура, которая удерживает дисциплину: каркас пакета (RP-001), тест-страж слоёв и
   запрета CLI (RP-002), типы (RP-003), схема конфигов (RP-004), интегратор с двумя адаптерами
   (RP-005), протоколы и реестр моделей с тестовыми заглушками (RP-006), скелет LaTeX с проверялкой
   соответствия коду (RP-007).
 - Первый вертикальный срез (RP-008) выбран так, чтобы у него было **точное аналитическое решение**:
   полёт точечной массы в вакууме. Первый же тест проверяет физику, а не вывод собственного кода.
-- Валидация по fx27 (RP-009) — **один набор тестов, здесь, на настоящих числах fx27**. Не начинать,
-  пока пользователь не скажет, откуда берутся эталонные числа (§12, п. 11 архитектуры): выгрузки
-  OpenRocket, результаты порта v1, `rocketpy` или телеметрия реального полёта — это разные виды
-  истины и разные допуски.
+- **Сверка с чужими моделями отложена** (слова пользователя: «dont compare against other model. just
+  go with it»). Источник эталонных чисел выбирать не нужно; M1 проверяется аналитическим решением.
 - Жёсткие правила на все тикеты: тесты до кода; никакого CLI/`__main__`/`print`; ядро не импортирует
   `loaders`/`presentation`/`matplotlib`; СИ внутри; слово «fx27» не встречается в `src/` нигде.
 
@@ -127,23 +130,31 @@ This ticket keeps every later ticket honest, which is why it comes second and no
 `State` as a **layout descriptor** (index names → slices), with all three layouts from §5.4 defined
 now even though only `point` is used by RP-008:
 
-| Layout | Fields | `n_state` |
-|---|---|---|
-| `point` | `pos(d)`, `vel(d)`, `mass`, with `d ∈ {1,2,3}` a layout parameter | `2d + 1` |
-| `planar` | `pos(2)`, `vel(2)`, `pitch`, `pitch_rate`, `mass` | 7 |
-| `6dof` | `pos(3)`, `vel(3)`, `quat(4)`, `omega(3)`, `mass` | 14 |
+| Layout | Fields | `n_state` | Status |
+|---|---|---|---|
+| `point` | **flight-path-angle parameterisation** (§5.4.1): `d=1` → `h, V, mass`; `d=2` → `x, h, V, θ, mass`; `d=3` → `x, y, h, V, θ, ψ, mass` | 3 / 5 / 7 | **in scope** |
+| `planar` | `pos(2)`, `vel(2)`, `pitch`, `pitch_rate`, `mass` | 7 | deferred — placeholder only |
+| `6dof` | `pos(3)`, `vel(3)`, `quat(4)`, `omega(3)`, `mass` | 14 | deferred — placeholder only |
+
+**Define `point` properly; the other two are placeholders** that exist only to prove the
+layout-descriptor mechanism generalises. Do not invest in them and do not let them shape `point`.
+
+`θ` gets a named accessor `traj.flight_path_angle` whose docstring states it is a **kinematic
+quantity, not a rotational state** (§5.4.1). That is the one naming trap in this ticket: when a
+genuine `pitch` state arrives with M2 later, the two must stay separately named — they differ exactly
+by the angle of attack, which is identically zero in M1 and non-zero in M2.
 
 `Trajectory` holding `t: (K,)`, `y: (N, K, n_state)`, `layout`, `aux: dict[str, ndarray]`, with named
-accessors (`traj.altitude`, `traj.velocity`) over slices — **no caller ever indexes a raw column**,
-which is what lets a metric written against `planar` keep working on `6dof`.
+accessors (`traj.altitude`, `traj.speed`, `traj.flight_path_angle`) over slices — **no caller ever
+indexes a raw column**, which is what lets a metric survive a later change of layout.
 Then `EventLog`, `Provenance`, `SimulationResult`, `OptimizationResult`, each with `to_dict()`
 producing JSON-safe output.
 `units.py`: SI conversion helpers, documented as edge-only (I5). `constants.py`: physical constants,
 each carrying an `Implements:`/`Docs:` back-reference to `docs/appendix/constants.tex` (§8.3).
 
-Tests: `to_dict()` round-trip; accessor correctness for all three layouts; `N=1` and `N>1` shapes;
-a `Trajectory` built with mismatched shapes raises rather than silently broadcasting (that last one
-is the bug class this design exists to prevent).
+Tests: `to_dict()` round-trip; accessor correctness for the `point` layout at `d = 1, 2, 3`; `N=1`
+and `N>1` shapes; a `Trajectory` built with mismatched shapes raises rather than silently
+broadcasting (that last one is the bug class this design exists to prevent).
 
 ---
 
@@ -246,14 +257,37 @@ marker (excluded from the default run per RP-001) and flag back to the orchestra
 - **Assignee:** developer
 - **depends_on:** [RP-003, RP-004, RP-005, RP-006]
 - **parallel_safe:** false  *(the integration point — do not parallelise it with anything)*
-- **Spec slice:** §5.4 (M1 row + why the sequence), §4.1 (layers), §6.2 (api surface sketch), §5.2 (SimulationResult), §10 (determinism, provenance)
+- **Spec slice:** **§5.4.1 in full (M1's equations — read this one properly)**, §5.4 (table), §4.1 (layers), §6.2 (api surface sketch), §5.2 (SimulationResult), §10 (determinism, provenance)
 
 The thinnest path through **every** layer, deliberately chosen because it has a **closed-form
 answer**: constant gravity, zero drag, constant thrust, linear mass burn, point mass.
 
-- `rhs_point.py`: **dimension-parametric** (`d ∈ {1,2,3}`) — `dv/dt = (T + D + G)/m` is identical
-  vector algebra in 1, 2 or 3 spatial components, so one implementation covers vertical ascent, a
-  planar point mass and a 3D point mass. No attitude, no angle of attack, no moments.
+- `rhs_point.py` — **M1: the zero-lift gravity turn.** Thrust and drag act exactly along the velocity
+  vector, so the angle of attack is identically zero and the vehicle's orientation *is* its velocity
+  direction. Attitude is therefore present but **kinematically derived — there is no rotational
+  equation and no torque anywhere in this model**:
+
+  ```
+  dV/dt = (T - D)/m - g·sin(θ)
+  dθ/dt = -g·cos(θ) / V
+  dx/dt =  V·cos(θ)·cos(ψ)
+  dy/dt =  V·cos(θ)·sin(ψ)        # d = 3 only
+  dh/dt =  V·sin(θ)
+  dψ/dt =  0                      # no side force ⇒ heading constant
+  dm/dt = -ṁ(t)
+  ```
+
+  **This is NOT a frozen/fixed-attitude model** — that would hold θ constant regardless of the
+  velocity direction, implying α ≠ 0 and a lift force the model then ignores. Do not implement it
+  that way, and say so in the module docstring so a later agent cannot "helpfully" reinterpret it.
+  **Dimension-parametric** (`d ∈ {1,2,3}`): one implementation covers vertical ascent (`d=1`, θ ≡ π/2
+  and the dθ/dt equation drops out), the planar gravity turn (`d=2`) and the 3D case (`d=3`, where ψ
+  is constant, so 3D buys orientation of the trajectory plane rather than out-of-plane motion).
+
+  **Mandatory:** `dθ/dt` is singular at `V = 0`, which is exactly the state at ignition and
+  near-exactly a vertical apogee. Guard on `V` below a declared threshold and hold θ, consistent with
+  §10's "the RHS must never raise on out-of-domain input", and **test it**. This is the one real
+  numerical trap in M1; the docstring must state what happens there, not just the code.
 - `frames.py`, `forces.py`: force assembly from model outputs.
 - `simulations/flight.py`: returns a `SimulationResult`, **pure — it returns, it never writes** (I2).
 - `metrics/flight.py`: `apogee`, `apogee_time`, `rail_exit_speed` as individual pure functions
@@ -264,26 +298,41 @@ answer**: constant gravity, zero drag, constant thrust, linear mass burn, point 
 Acceptance:
 - `tests/analytic/test_vacuum_ballistic.py` asserts apogee and apogee time against the closed-form
   solution to `ANALYTIC` tolerance — **the first test in the project checks physics, not the code's
-  own output**;
+  own output**. With `T = 0`, `D = 0`, constant `g` and `θ₀ = π/2` the gravity-turn equations reduce
+  to vacuum ballistics exactly, so the oracle is unambiguous.
+- a second analytic case with `θ₀ < π/2` (`T = 0`, `D = 0`): the gravity turn reduces to a parabola,
+  so range, apogee and the final θ all have closed forms. **This is the test that actually checks the
+  dθ/dt equation** — the vertical case alone would pass with that term missing entirely.
+- `V → 0` guard: a scenario reaching `V = 0` (vertical apogee, and ignition at rest) completes
+  without raising, without NaN, and with θ held — see the mandatory note above.
 - the same scenario with `N=100` identical members yields 100 identical trajectories (D3 sanity + I3
   determinism);
 - `d=1`, `d=2` and `d=3` agree for a purely vertical scenario;
 - provenance is populated and `SimulationResult.to_dict()` round-trips.
 
+**Stop after this ticket.** M2/M3 are deferred (below); the user will ask for M2 explicitly once M1
+is built and validated.
+
 ---
 
-### [RP-011] M2 — "2D": pitch-plane rigid body
+### [RP-011] M2 — "2D": pitch-plane rigid body  —  ⛔ **DEFERRED, DO NOT START**
+- **Status:** **deferred by the user 2026-11-27.** Scope right now is M1 only. The user will ask for
+  this explicitly once M1 is built and validated. **`developer` must not start this ticket**, and must
+  not pre-build parts of it inside RP-008 "while we're here".
 - **Module/boundaries:** `src/rocket_physics/dynamics/rhs_planar.py`, `src/rocket_physics/models/{aerodynamics,mass,actuation}/**`, `src/rocket_physics/metrics/stability.py`, `tests/unit/dynamics/test_rhs_planar.py`, `tests/analytic/test_planar_*.py`, `tests/properties/**`
 - **Assignee:** developer
 - **depends_on:** [RP-008]
 - **parallel_safe:** false
-- **Spec slice:** §5.4 (M2 row + the "2D" ambiguity note), §4.2 (Seam 3)
+- **Spec slice:** §5.4 (M2 row + the M2/M3 reading note), §4.2 (Seam 3)
 
-Attitude enters here. State `pos(2), vel(2), pitch, pitch_rate, mass` (7). Adds angle of attack,
-normal force, aerodynamic moment, pitch inertia, centre of pressure vs centre of gravity, and
-**static margin** — the first model in which the word "stability" means anything, which is why the
-project's own description ("trajectory *and stability* simulation") forces attitude into the middle
-step. Rail-constrained launch becomes expressible here too.
+*Forward note only — kept so the design accommodates it and so it is not re-derived later.*
+
+**Dynamical** attitude enters here: state `pos(2), vel(2), pitch, pitch_rate, mass` (7), with its own
+moment equation. Note the real increment over M1 is **not** "attitude appears" — M1 already carries a
+kinematic θ (§5.4.1). It is that attitude becomes an independent state, which is what makes α ≠ 0
+possible and with it normal force, aerodynamic moment, pitch inertia, CP vs CG and **static
+margin** — everything the word "stability" means. Rail-constrained launch becomes expressible here too.
+`pitch` and M1's `flight_path_angle` must stay separately named: they differ exactly by α.
 
 Real model adapters start landing in this ticket (Barrowman aero, linear-burn mass,
 first-order-lag actuator), each with its `.tex` section implemented or `\simtodo`-marked per §8, and
@@ -293,12 +342,15 @@ Acceptance: static margin and short-period frequency match analytic expressions 
 geometry; a planar run with zero angle of attack and zero moment reproduces the M1 point-mass result
 — a free cross-model regression test, and the reason the progression is layered this way.
 
-**Note before starting:** §5.4 flags that "2D" is read as *planar rigid body with pitch*, not *planar
-point mass*. One line of confirmation via the orchestrator if anything in fx27's needs contradicts it.
+**When it is eventually unblocked:** §5.4 records that "2D" is read as *planar rigid body with pitch*,
+not *planar point mass* (M1's `d = 2` case already is a planar point mass). Confirm with the user at
+that point, not now.
 
 ---
 
-### [RP-012] M3 — "3D": full 6-DOF rigid body
+### [RP-012] M3 — "3D": full 6-DOF rigid body  —  ⛔ **DEFERRED, DO NOT START**
+- **Status:** **deferred by the user 2026-11-27.** Blocked behind RP-011, which is itself deferred.
+  Forward note only.
 - **Module/boundaries:** `src/rocket_physics/dynamics/{rhs_6dof.py,quaternion.py}`, `src/rocket_physics/models/{wind,sensors}/**`, `src/rocket_physics/metrics/{loads.py,dispersion.py}`, `src/rocket_physics/simulations/{ensemble.py,sweep.py}`, `tests/**`
 - **Assignee:** developer
 - **depends_on:** [RP-011]
@@ -316,54 +368,48 @@ property test (rotating the inertial frame rotates the trajectory and nothing el
 performance budgets for the single flight and the 1 000-member ensemble are met, or the §10 revisit
 ladder (profile → numba → Rust) is triggered **with measurements attached**.
 
-**Note before starting:** §5.4 flags that "3D" is read as *full 6-DOF*. If fx27 actually needs v1's
-*frozen-attitude* model (3D translational, carrying a non-rotating attitude state — v1's port chose it
-deliberately at a user gate), that is an **M2.5** `rhs_frozen.py`, ~1-2 days, inserted before this
-ticket and disturbing nothing above or below. One line of confirmation from the user first.
+**When it is eventually unblocked:** §5.4 records that "3D" is read as *full 6-DOF*. If fx27 turns out
+to need v1's *frozen-attitude* model (3D translational, holding a non-rotating attitude state — v1's
+port chose it deliberately at a user gate), that is an **M2.5** `rhs_frozen.py`, ~1-2 days, inserted
+before this ticket. Note it is **a different model from M1** despite both being called "point mass"
+loosely: a frozen attitude implies α ≠ 0 and hence lift, whereas M1's α ≡ 0 by construction (§5.4.1).
 
 ---
 
-### [RP-009] fx27 validation suite  *(single suite, in this repo — D6b)*
-- **Module/boundaries:** `tests/validation/fx27/**` (including `tests/validation/fx27/data/`), `tests/tolerances.py`
+### [RP-009] fx27 validation suite  —  ⛔ **DEFERRED, LOW PRIORITY, DO NOT START**
+- **Status:** **deferred by the user 2026-11-27.** Verbatim: *"dont compare against other model. just
+  go with it… at some point we will compare but it shouldn't be this necessary."* **No oracle needs
+  picking, and nothing about this ticket is urgent.** M1 is verified against its closed-form solution,
+  which is a stronger check than agreement with another simulator. Do not raise the oracle question
+  with the user; they will raise comparison when they want it.
+- **Module/boundaries:** `tests/validation/fx27/**`, `tests/tolerances.py`
 - **Assignee:** developer
-- **depends_on:** [RP-008]  *(can start against M1; grows with RP-011 and RP-012)*
+- **depends_on:** [RP-008]
 - **parallel_safe:** false
-- **NEEDS ONE ANSWER FIRST:** §12 item 11 — **which oracle supplies the reference numbers**, which
-  campaign/vehicle to validate first, and which quantities count. Not a blocker for RP-001…RP-008.
-- **Spec slice:** §9 D6b (approved shape + its four consequences), §4.3 (I6 refinement), §10 (tolerance policy), §12 item 11, §13 (fx27 candidate reference data)
+- **Spec slice:** §9 D6b, §4.3 (I6 refinement), §10 (tolerance policy), §13 (fx27 candidate reference data)
 
-This is the **only** validation suite that will ever exist — fx27 has none and will not get one (C8).
-Binding rules from §9 D6b:
-
-1. Real fx27 reference numbers, committed. No anonymised-fixture layer.
-2. The suite imports **only `rocket_physics.api`** — it is a consumer of the public surface, exactly
-   like an fx27 run file. Needing to reach past `api` means `api` has a gap; fix `api`, not the test.
-   (Side benefit: this suite doubles as the honest usability test of the public interface.)
-3. Runs under the `validation` marker, excluded from the default run — its failures mean "the physics
-   disagrees with reality", not "the code is broken" — but it is a **release gate**, not optional.
-4. Every tolerance in `tests/tolerances.py` under `VALIDATION_FX27`, and **each reference datum must
-   record which oracle it came from**. The candidates differ in kind, not just in value: OpenRocket,
-   v1's port and `rocketpy` are other models' opinions (percent-level agreement is a consistency
-   check); flight telemetry is reality (disagreement means *our* model is wrong). A suite that mixes
-   them without labelling which is which means nothing — so the label is mandatory metadata, not a
-   comment.
-
-Available material is inventoried in §13 ("fx27 candidate reference data") — do not re-probe the
-fx27 folder, take it from there.
+*Forward note only.* When comparison does become wanted, the shape is already settled: one suite,
+here, real fx27 numbers, no anonymised layer (fx27 has no suite of its own and will not get one, C8);
+imports only `rocket_physics.api`; `validation` marker; tolerances in `tests/tolerances.py` under
+`VALIDATION_FX27`; and each reference datum labelled with **which oracle** it came from, since
+OpenRocket / v1's port / `rocketpy` are other models' opinions while flight telemetry is reality, and
+mixing the two kinds unlabelled makes a suite meaningless. Candidate material is inventoried in §13
+— do not re-probe the fx27 folder.
 
 ---
 
-### [RP-010] v1 cross-check harness  *(optional; decide after RP-011)*
+### [RP-010] v1 cross-check harness  —  ⛔ **DEFERRED**
+- **Status:** **deferred 2026-11-27** by the same user decision as RP-009 — no comparison against
+  other models for now. Do not start.
 - **Module/boundaries:** `tests/crosscheck_v1/**`
 - **Assignee:** developer
 - **depends_on:** [RP-011]
 - **parallel_safe:** true
 - **Spec slice:** §2 (conclusion 1), §10 (tolerance policy), §13 (v1 location)
 
-Opt-in (`-m crosscheck`) differential tests against v1 at `D:/Projects - Ongoing/rocket-physics`
-(read-only; never imported by `src/`). Worth doing only once a model without a closed-form answer
-exists — M1 has an exact solution and needs no oracle — so this follows RP-011, not RP-008. Raise with
-the orchestrator before starting: it depends on how v1's environment is reachable from this tree.
+*Forward note only.* Opt-in (`-m crosscheck`) differential tests against v1 at
+`D:/Projects - Ongoing/rocket-physics` (read-only; never imported by `src/`). Pointless before a model
+without a closed-form answer exists — M1 has an exact solution and needs no oracle at all.
 
 ---
 
@@ -374,10 +420,14 @@ the orchestrator before starting: it depends on how v1's environment is reachabl
 | 1 | **RP-001** | Alone. Everything depends on it. |
 | 2 | **RP-003** | Types are needed by RP-004 / RP-005 / RP-006. |
 | 3 | **RP-002, RP-004, RP-005, RP-006, RP-007** | Parallel. Boundaries are disjoint: RP-002 → `tests/test_layering.py` + `tools/layers.py`; RP-004 → `config/` + `tests/data/`; RP-005 → `numerics/`; RP-006 → `models/`; RP-007 → `docs/` + `tools/check_model_docs.py`. (RP-002 and RP-007 both touch `tools/`, but different files.) |
-| 4 | **RP-008** (M1) | Alone — the integration point. |
-| 5 | **RP-011** (M2) | After RP-008. **RP-009** may start in parallel once its oracle question is answered; **RP-010** is optional and parallel-safe. |
-| 6 | **RP-012** (M3) | After RP-011. Optional **M2.5** (`rhs_frozen.py`) inserted before it only if the user confirms fx27 needs it. |
+| 4 | **RP-008** (M1) | Alone — the integration point. **This is the last ticket in scope.** |
+| — | ⛔ RP-009, RP-010, RP-011, RP-012 | **All deferred.** Do not start any of them. Report back after RP-008 and wait for the user. |
 
-Stage 1 is complete when M1 is validated against closed form, M2 and M3 against their analytic and
-cross-model checks, the §10 performance budgets are met or explicitly re-budgeted with measurements
-attached, and `tests/validation/fx27/` is green against whichever oracle the user names.
+**Scope ends at RP-008.** Seven tickets: RP-001 → RP-003 → {RP-002, RP-004, RP-005, RP-006, RP-007}
+→ RP-008.
+
+Done when: `uv sync` / `ruff` / `pytest` are green; the layering + no-shell + no-"fx27"-in-`src/`
+tests pass; the vectorised RK4 and the `solve_ivp` verification adapter agree on a smooth problem;
+and M1 reproduces the closed-form vacuum solution **in both the vertical and the inclined
+(`θ₀ < π/2`) case**, with the `V → 0` guard tested. Then stop and report — the user decides what
+comes next.
