@@ -1,0 +1,23 @@
+{
+  "_comment": "Skeleton of dev/docs/market/feature-registry.json — the project's cumulative feature registry. market-analyst owns every field except 'decision'; product-manager owns 'decision' (final priority and stage, set after brief approval). Delete this _comment key and the example feature. Validate/render: python .claude/scripts/market_report.py registry",
+  "schema": 1,
+  "title": "Реестр фич проекта",
+  "updated": "YYYY-MM-DD",
+  "features": [
+    {
+      "id": "F-001",
+      "name": "Короткое имя фичи (по-русски)",
+      "category": "Группа фич, напр. «Онбординг», «Совместная работа»",
+      "description": "Что фича делает для пользователя — 1-2 предложения, без реализации",
+      "value": "Почему это важно пользователю (необязательно)",
+      "kind": "table-stakes | differentiator | innovation",
+      "suggested_priority": "must | should | could | wont",
+      "origin": "market | vision | user | research",
+      "decision": {
+        "priority": "must | should | could | wont",
+        "stage": 1,
+        "note": "set by product-manager only; omit the whole 'decision' key until decided"
+      }
+    }
+  ]
+}

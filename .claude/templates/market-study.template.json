@@ -1,0 +1,49 @@
+{
+  "_comment": "Skeleton of dev/docs/market/<slug>.json — data for one competitor study. All human-readable values in the user's language (default Russian); keys stay English. Feature ids must exist in feature-registry.json next to this file. Delete this _comment key. Render: python .claude/scripts/market_report.py render dev/docs/market/<slug>.json",
+  "schema": 1,
+  "slug": "baseline",
+  "kind": "baseline | task",
+  "title": "Анализ аналогов: <продукт или задача>",
+  "date": "YYYY-MM-DD",
+  "question": "Что именно исследовали — 1 предложение",
+  "product_context": "1-3 предложения о нашем продукте/задаче, чтобы отчёт читался без vision.md",
+  "summary": [
+    "5-8 ключевых выводов: что на рынке есть у всех, где пробелы, что это значит для нас"
+  ],
+  "competitors": [
+    {
+      "id": "c1",
+      "name": "Название продукта",
+      "url": "https://...",
+      "type": "direct | indirect | substitute | inspiration",
+      "description": "Что это и как работает — 2-3 предложения",
+      "positioning": "Как продукт себя позиционирует",
+      "audience": "Для кого",
+      "pricing": "Модель и цены (с датой проверки, если цены нестабильны)",
+      "platforms": ["web", "iOS", "Android"],
+      "maturity": "Год запуска / масштаб / стадия, если известно",
+      "strengths": [
+        {"text": "Конкретное преимущество, а не «удобный интерфейс»", "sources": ["s1"]}
+      ],
+      "weaknesses": [
+        {"text": "Конкретный недостаток — лучше всего из отзывов пользователей", "sources": ["s2"]}
+      ],
+      "takeaways": ["Что перенять / чего избежать нам"],
+      "features": {"F-001": "full | partial | none | unknown"},
+      "sources": ["s1"]
+    }
+  ],
+  "opportunities": [
+    {"text": "Пробел рынка или слабое место конкурентов, которое можно закрыть", "features": ["F-001"]}
+  ],
+  "recommendations": ["Рекомендация для продукта — с опорой на находки выше"],
+  "risks": ["Рыночный риск: сильный конкурент, низкий барьер входа, регуляторика…"],
+  "methodology": {
+    "criteria": ["По каким критериям отбирали и сравнивали"],
+    "approach": "Какие запросы/источники использовали (Exa, сайты, сторы, отзывы, обзоры)",
+    "limitations": ["Что не удалось проверить (платные тарифы, закрытые продукты…)"]
+  },
+  "sources": [
+    {"id": "s1", "title": "Название страницы", "url": "https://...", "accessed": "YYYY-MM-DD"}
+  ]
+}

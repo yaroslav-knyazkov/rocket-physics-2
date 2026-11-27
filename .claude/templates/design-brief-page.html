@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Бриф</title>
+<style>
+  :root {
+    --bg: #f3f2ef; --panel: #ffffff; --ink: #1c1c1a; --muted: #6a6a64; --line: #dbdad4;
+    --accent: #2456e6; --warn: #9a5b00; --warn-bg: #fbf1dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9c9b94; --line: #353530;
+      --accent: #8aa7ff; --warn: #e2a64c; --warn-bg: #33290f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 120px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .q { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .q h2 { font-size: 16px; margin: 0 0 4px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .num { color: var(--muted); font-weight: 500; }
+  .tag { font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); white-space: nowrap; }
+  .tag.ok { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { position: relative; }
+  .opt input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .opt span { display: block; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .opt input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { width: 100%; margin-top: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; resize: vertical; }
+  textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 12px 16px; }
+  .bar div { max-width: 760px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .status { color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Бриф</h1>
+  <p class="lead">Ответы уже проставлены так, как я понял задачу. Пометка «допущение» — то, чего ты не говорил: я предположил сам. Поправь, что не так, нажми «Скопировать ответы» и вставь в чат. Если всё верно — напиши в чате «бриф ок». <a href="index.html">← к доске вариантов</a></p>
+  <div id="list"></div>
+</div>
+<div class="bar"><div>
+  <button type="button" id="copy">Скопировать ответы</button>
+  <span class="status" id="status">Ответы сохраняются в этом браузере автоматически.</span>
+</div></div>
+
+<script>
+  // ?b=<name> loads brief-<name>-data.js (one page serves several briefs); default brief-data.js
+  (function () {
+    var b = new URLSearchParams(location.search).get("b");
+    var file = b && /^[a-z0-9-]+$/i.test(b) ? "brief-" + b + "-data.js" : "brief-data.js";
+    document.write('<script src="' + file + '"><' + '/script>');
+  })();
+</script>
+<script>
+(function () {
+  'use strict';
+  var BRIEF = window.BRIEF || { key: 'brief', title: 'Бриф', questions: [] };
+  var QUESTIONS = BRIEF.questions;
+  document.getElementById('title').textContent = BRIEF.title;
+  document.title = BRIEF.title;
+
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(BRIEF.key) || '{}') || {}; } catch (e) { state = {}; }
+  function save() { try { localStorage.setItem(BRIEF.key, JSON.stringify(state)); } catch (e) {} }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function answer(q) {
+    if (!state[q.id]) state[q.id] = { picked: (q.picked || []).slice(), note: '' };
+    return state[q.id];
+  }
+
+  var list = document.getElementById('list');
+  QUESTIONS.forEach(function (q, i) {
+    var a = answer(q);
+    var box = el('section', 'q');
+    var h = el('h2');
+    h.appendChild(el('span', 'num', (i + 1) + '.'));
+    h.appendChild(el('span', null, q.title));
+    h.appendChild(el('span', q.assumed ? 'tag' : 'tag ok', q.assumed ? 'допущение' : (q.kind === 'text' ? 'не спрашивал' : 'ты ответил')));
+    box.appendChild(h);
+    if (q.hint) box.appendChild(el('p', 'hint', q.hint));
+
+    if (q.options) {
+      var opts = el('div', 'opts');
+      q.options.forEach(function (text) {
+        var label = el('label', 'opt');
+        var input = document.createElement('input');
+        input.type = q.kind === 'one' ? 'radio' : 'checkbox';
+        input.name = q.id;
+        input.checked = a.picked.indexOf(text) !== -1;
+        input.addEventListener('change', function () {
+          if (q.kind === 'one') a.picked = [text];
+          else if (input.checked) a.picked.push(text);
+          else a.picked = a.picked.filter(function (x) { return x !== text; });
+          save();
+        });
+        label.appendChild(input);
+        label.appendChild(el('span', null, text));
+        opts.appendChild(label);
+      });
+      box.appendChild(opts);
+    }
+
+    var note = document.createElement('textarea');
+    note.placeholder = q.kind === 'text' ? 'Напиши здесь' : 'Своё или уточнение — необязательно';
+    note.setAttribute('aria-label', q.title + ' — свой ответ');
+    note.value = a.note || '';
+    note.addEventListener('input', function () { a.note = note.value; save(); });
+    box.appendChild(note);
+    list.appendChild(box);
+  });
+
+  function buildText() {
+    var lines = ['Ответы на бриф:'];
+    QUESTIONS.forEach(function (q, i) {
+      var a = answer(q);
+      var parts = [];
+      if (a.picked.length) parts.push(a.picked.join('; '));
+      if (a.note && a.note.trim()) parts.push('своё: ' + a.note.trim());
+      lines.push((i + 1) + '. ' + q.title + ' — ' + (parts.length ? parts.join(' | ') : 'без ответа'));
+    });
+    return lines.join('\n');
+  }
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var text = buildText();
+    var status = document.getElementById('status');
+    function done() { status.textContent = 'Скопировано. Вставь в чат с Claude.'; }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); }
+      catch (e) { status.textContent = 'Не получилось скопировать автоматически.'; window.prompt('Скопируй ответы:', text); }
+      ta.remove();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  });
+})();
+</script>
+</body>
+</html>

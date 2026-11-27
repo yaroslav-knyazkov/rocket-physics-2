@@ -1,0 +1,14 @@
+# --- agents kit (Claude Code) ---
+.claude/wt-active.json
+.claude/wt.config.local.json
+.claude/settings.local.json
+.claude/hooks/telegram.local.json
+.claude/**/__pycache__/
+.wt-slot.json
+.worktrees/
+graphify-out/
+temporary/
+dev/.status-backup/
+dev/.docs-backup/
+.playwright-mcp/
+dev/concept/**/shots/

@@ -1,0 +1,5 @@
+# --- agents kit (Claude Code) ---
+# hooks run under bash: CRLF breaks them (core.autocrlf=true on Windows)
+*.sh text eol=lf
+*.py text eol=lf
+*.ps1 text eol=crlf

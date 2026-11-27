@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Доска вариантов</title>
+<style>
+  :root {
+    --bg: #f3f2ef; --panel: #ffffff; --ink: #1c1c1a; --muted: #6a6a64; --line: #dbdad4;
+    --accent: #2456e6; --ok: #177245; --warn: #9a5b00; --off: #8d8d86;
+    --stage: #e9e8e3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9c9b94; --line: #353530;
+      --accent: #8aa7ff; --ok: #63cf97; --warn: #e2a64c; --off: #77776f;
+      --stage: #0e0e0d;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .top { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .project { font-weight: 650; font-size: 15px; }
+  .brief { color: var(--accent); font-size: 13px; text-decoration: none; }
+  .brief:hover { text-decoration: underline; }
+  .live { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .live.stale::before { background: var(--warn); }
+
+  .rounds { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .rounds button {
+    border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 10px;
+  }
+  .rounds button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .rounds .done { color: var(--muted); }
+
+  .bar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .question { font-size: 16px; font-weight: 600; flex: 1 1 320px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; padding: 4px 10px; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  main { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; padding: 14px 16px 16px; }
+  .grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(340px, 1fr); gap: 14px; height: 100%; }
+  .grid.focus { grid-auto-columns: 1fr; }
+  .grid.focus .card:not(.focused) { display: none; }
+  .pager { display: inline-flex; gap: 4px; align-items: center; }
+  .pager[hidden] { display: none; }
+  .pager > button { border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 8px; }
+  .pages { display: inline-flex; gap: 4px; }
+  .pages button { min-width: 30px; border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 6px; font-weight: 600; text-transform: uppercase; }
+  .pages button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+
+  .card { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .card.chosen { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+  .card.rejected { opacity: .55; }
+  .meta { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .letter { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 6px; background: var(--ink); color: var(--panel); font-weight: 700; text-transform: uppercase; }
+  .title { font-weight: 650; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; color: var(--off); }
+  .pill.ready { color: var(--accent); } .pill.chosen { color: var(--ok); } .pill.building { color: var(--warn); }
+  .axis { margin-top: 6px; color: var(--muted); font-size: 12px; }
+  .why { margin-top: 4px; }
+  .cost, .note { margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .note { border-left: 2px solid var(--warn); padding-left: 8px; }
+  .actions { margin-top: 8px; display: flex; gap: 12px; font-size: 12px; }
+  .actions a, .actions button { color: var(--accent); background: none; border: 0; padding: 0; text-decoration: none; }
+  .actions a:hover, .actions button:hover { text-decoration: underline; }
+
+  .stage { position: relative; flex: 1; min-height: 0; background: var(--stage); overflow: hidden; }
+  .stage iframe { position: absolute; top: 0; left: 0; border: 0; background: #fff; transform-origin: 0 0; }
+  .wait { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; padding: 16px; color: var(--muted); text-align: center; }
+  .wait pre { margin: 0; font: 12px/1.25 ui-monospace, Consolas, monospace; color: var(--ink); text-align: left; max-width: 100%; overflow: auto; }
+
+  .empty { margin: auto; max-width: 460px; text-align: center; color: var(--muted); padding: 40px 16px; }
+  .empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <span class="project" id="project">Доска вариантов</span>
+    <a class="brief" id="brief" target="_blank" rel="noopener" hidden>Бриф — вопросы и ответы</a>
+    <span class="live" id="live">ждём manifest.js</span>
+  </div>
+  <nav class="rounds" id="rounds" aria-label="Раунды"></nav>
+  <div class="bar">
+    <div class="question" id="question"></div>
+    <div class="seg" id="widths" role="group" aria-label="Ширина экрана">
+      <button type="button" data-w="0">По ширине</button>
+      <button type="button" data-w="390">390</button>
+      <button type="button" data-w="768">768</button>
+      <button type="button" data-w="1280">1280</button>
+      <button type="button" data-w="1440">1440</button>
+    </div>
+    <div class="seg" id="modes" role="group" aria-label="Вид">
+      <button type="button" data-m="all">Все рядом</button>
+      <button type="button" data-m="one">По одному</button>
+    </div>
+    <div class="pager" id="pager" hidden>
+      <button type="button" id="prev" aria-label="Предыдущий вариант" title="Клавиша ←">◀</button>
+      <span class="pages" id="pages" role="group" aria-label="Варианты"></span>
+      <button type="button" id="next" aria-label="Следующий вариант" title="Клавиша →">▶</button>
+    </div>
+  </div>
+</header>
+<main id="main"><div class="grid" id="grid"></div></main>
+
+<script>
+(function () {
+  'use strict';
+
+  var STATUS = { planned: 'в плане', building: 'в работе', ready: 'готов', chosen: 'выбран', rejected: 'отклонён' };
+  var POLL_MS = 2000;
+
+  var lab = null;
+  var rev = null;
+  var roundId = null;      // null = follow the latest open round
+  var width = 0;           // 0 = fit the column
+  var focused = null;      // "<round>/<variant>" shown in "one" mode
+  var mode = "all";        // all = side by side, one = one variant at full width
+  var cards = {};          // key -> { el, parts, src }
+  var failures = 0;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  try {
+    var saved = JSON.parse(sessionStorage.getItem('lab-board') || '{}');
+    if (typeof saved.width === 'number') width = saved.width;
+    if (saved.mode === 'one' || saved.mode === 'all') mode = saved.mode;
+    var qv = new URLSearchParams(location.search).get('view'); // ?view=one|all — a shareable link to a view
+    if (qv === 'one' || qv === 'all') mode = qv;
+  } catch (e) { /* storage unavailable — defaults are fine */ }
+  function remember() {
+    try { sessionStorage.setItem('lab-board', JSON.stringify({ width: width, mode: mode })); } catch (e) {}
+  }
+
+  // manifest.js is loaded as a script, not fetched, so the board also works from file://
+  function load(done) {
+    var s = document.createElement('script');
+    s.src = 'manifest.js?t=' + Date.now();
+    s.onload = function () { s.remove(); done(window.LAB || null); };
+    s.onerror = function () { s.remove(); done(null); };
+    document.head.appendChild(s);
+  }
+
+  function poll() {
+    load(function (next) {
+      var live = $('live');
+      if (!next || !Array.isArray(next.rounds)) {
+        failures++;
+        live.classList.add('stale');
+        live.textContent = lab ? 'manifest.js недоступен — показана последняя версия' : 'ждём manifest.js';
+        if (!lab) renderEmpty();
+        return;
+      }
+      failures = 0;
+      live.classList.remove('stale');
+      live.textContent = 'обновляется автоматически · версия ' + next.rev;
+      if (next.rev !== rev || !lab) { lab = next; rev = next.rev; render(); }
+    });
+  }
+
+  function currentRound() {
+    var rounds = lab.rounds, i;
+    if (roundId) for (i = 0; i < rounds.length; i++) if (rounds[i].id === roundId) return rounds[i];
+    for (i = rounds.length - 1; i >= 0; i--) if (rounds[i].status !== 'decided') return rounds[i];
+    return rounds[rounds.length - 1] || null;
+  }
+
+  function renderEmpty() {
+    var grid = $('grid');
+    grid.textContent = '';
+    cards = {};
+    var box = el('div', 'empty');
+    box.appendChild(el('p', null, 'Вариантов пока нет.'));
+    var p = el('p');
+    p.appendChild(document.createTextNode('Доска читает '));
+    p.appendChild(el('code', null, 'manifest.js'));
+    p.appendChild(document.createTextNode(' из этой же папки и обновится сама, когда появится первый раунд.'));
+    box.appendChild(p);
+    grid.appendChild(box);
+  }
+
+  function render() {
+    $('project').textContent = lab.project || 'Доска вариантов';
+    document.title = (lab.project ? lab.project + ' — ' : '') + 'доска вариантов';
+    $('brief').hidden = !lab.brief;
+    if (lab.brief) $('brief').href = lab.brief;
+
+    var round = currentRound();
+    var nav = $('rounds');
+    nav.textContent = '';
+    lab.rounds.forEach(function (r) {
+      var b = el('button', r.status === 'decided' ? 'done' : null, r.title || r.id);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(round && r.id === round.id));
+      b.onclick = function () { roundId = r.id; focused = null; render(); };
+      nav.appendChild(b);
+    });
+
+    if (!round) { $('question').textContent = ''; renderEmpty(); return; }
+    $('question').textContent = round.question || round.title || '';
+
+    Array.prototype.forEach.call($('widths').children, function (b) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.w) === width));
+    });
+
+    var grid = $('grid');
+    var keep = {};
+    var order = [];
+    (round.variants || []).forEach(function (v) {
+      var key = round.id + '/' + v.id;
+      keep[key] = true;
+      var card = cards[key] || (cards[key] = build(key));
+      update(card, v, key);
+      order.push(card.el);
+    });
+    Object.keys(cards).forEach(function (key) {
+      if (!keep[key]) { cards[key].el.remove(); delete cards[key]; }
+    });
+    if (grid.firstChild && !grid.firstChild.classList.contains('card')) grid.textContent = '';
+    order.forEach(function (node, i) {
+      if (grid.children[i] !== node) grid.insertBefore(node, grid.children[i] || null);
+    });
+    if (!order.length) renderEmpty();
+
+    var keys = (round.variants || []).map(function (v) { return round.id + '/' + v.id; });
+    if (focused && !keep[focused]) focused = null;
+    if (mode === 'one' && !focused) focused = keys[0] || null;
+    if (mode === 'all') focused = null;
+    Array.prototype.forEach.call($('modes').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.m === mode)); });
+    renderPager(round, keys);
+    grid.classList.toggle('focus', !!focused);
+    Object.keys(cards).forEach(function (key) {
+      cards[key].el.classList.toggle('focused', key === focused);
+      cards[key].parts.zoom.textContent = key === focused ? 'Все рядом' : 'Развернуть';
+    });
+    fitAll();
+  }
+
+  function build(key) {
+    var p = {};
+    var card = el('article', 'card');
+    var meta = el('div', 'meta');
+    var row = el('div', 'row');
+    p.letter = el('span', 'letter');
+    p.title = el('span', 'title');
+    p.pill = el('span', 'pill');
+    row.appendChild(p.letter); row.appendChild(p.title); row.appendChild(p.pill);
+    p.axis = el('div', 'axis');
+    p.why = el('div', 'why');
+    p.cost = el('div', 'cost');
+    p.note = el('div', 'note');
+    var actions = el('div', 'actions');
+    p.open = el('a', null, 'Открыть отдельно');
+    p.open.target = '_blank'; p.open.rel = 'noopener';
+    p.zoom = el('button', null, 'Развернуть');
+    p.zoom.type = 'button';
+    p.zoom.onclick = function () {
+      if (mode === 'one' && focused === key) { mode = 'all'; focused = null; } else { mode = 'one'; focused = key; }
+      remember(); render();
+    };
+    actions.appendChild(p.open); actions.appendChild(p.zoom);
+    [row, p.axis, p.why, p.cost, p.note, actions].forEach(function (n) { meta.appendChild(n); });
+    p.stage = el('div', 'stage');
+    card.appendChild(meta); card.appendChild(p.stage);
+    if (window.ResizeObserver) new ResizeObserver(function () { fit(p); }).observe(p.stage);
+    return { el: card, parts: p, src: null };
+  }
+
+  function setText(node, text, prefix) {
+    node.hidden = !text;
+    node.textContent = text ? (prefix || '') + text : '';
+  }
+
+  function update(card, v, key) {
+    var p = card.parts;
+    var status = STATUS[v.status] ? v.status : 'planned';
+    card.el.className = 'card ' + status + (key === focused ? ' focused' : '');
+    p.letter.textContent = v.id;
+    p.title.textContent = v.title || 'Вариант ' + String(v.id).toUpperCase();
+    p.title.title = p.title.textContent;
+    p.pill.className = 'pill ' + status;
+    p.pill.textContent = STATUS[status];
+    setText(p.axis, v.axis);
+    setText(p.why, v.rationale);
+    setText(p.cost, v.tradeoffs, 'Цена: ');
+    setText(p.note, v.note);
+    p.zoom.textContent = key === focused ? 'Все рядом' : 'Развернуть';
+
+    var hasFile = !!v.file && status !== 'planned' && status !== 'building';
+    p.open.hidden = !hasFile;
+    p.zoom.hidden = !hasFile;
+
+    if (!hasFile) {
+      card.src = null;
+      p.frame = null;
+      p.stage.textContent = '';
+      var wait = el('div', 'wait');
+      wait.appendChild(el('div', null, status === 'building' ? 'Агент собирает этот вариант…' : 'Запланирован — ещё не начат'));
+      if (v.sketch) wait.appendChild(el('pre', null, v.sketch));
+      p.stage.appendChild(wait);
+      return;
+    }
+
+    var src = v.file + (v.file.indexOf('?') === -1 ? '?' : '&') + 'v=' + (v.v || 0);
+    p.open.href = v.file;
+    if (card.src !== src) {            // reload only the variant whose file changed
+      card.src = src;
+      p.stage.textContent = '';
+      p.frame = el('iframe');
+      p.frame.title = p.title.textContent;
+      p.frame.src = src;
+      p.stage.appendChild(p.frame);
+    }
+  }
+
+  function fit(p) {
+    if (!p.frame) return;
+    var w = p.stage.clientWidth, h = p.stage.clientHeight;
+    if (!w || !h) return;
+    var vw = width || w;
+    var scale = Math.min(1, w / vw);
+    p.frame.style.width = vw + 'px';
+    p.frame.style.height = Math.round(h / scale) + 'px';
+    p.frame.style.transform = scale === 1 ? 'none' : 'scale(' + scale + ')';
+    p.frame.style.left = Math.max(0, Math.round((w - vw * scale) / 2)) + 'px';
+  }
+  function renderPager(round, keys) {
+    var pager = $('pager'), pages = $('pages');
+    pager.hidden = mode !== 'one' || keys.length < 2;
+    pages.textContent = '';
+    (round.variants || []).forEach(function (v) {
+      var key = round.id + '/' + v.id;
+      var b = el('button', null, v.id);
+      b.type = 'button';
+      b.title = v.title || v.id;
+      b.setAttribute('aria-pressed', String(key === focused));
+      b.onclick = function () { focused = key; render(); };
+      pages.appendChild(b);
+    });
+  }
+  function step(dir) {
+    var round = lab && currentRound();
+    if (!round || mode !== 'one') return;
+    var keys = (round.variants || []).map(function (v) { return round.id + '/' + v.id; });
+    if (!keys.length) return;
+    var i = Math.max(0, keys.indexOf(focused));
+    focused = keys[(i + dir + keys.length) % keys.length];
+    render();
+  }
+  function fitAll() { Object.keys(cards).forEach(function (key) { fit(cards[key].parts); }); }
+
+  $('widths').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    width = Number(b.dataset.w) || 0;
+    remember();
+    if (lab) render();
+  });
+  $('modes').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    mode = b.dataset.m === 'one' ? 'one' : 'all';
+    if (mode === 'all') focused = null;
+    remember();
+    if (lab) render();
+  });
+  $('prev').addEventListener('click', function () { step(-1); });
+  $('next').addEventListener('click', function () { step(1); });
+  window.addEventListener('resize', fitAll);
+  document.addEventListener('keydown', function (e) {
+    if (e.target.closest && e.target.closest('input, textarea, select')) return;
+    if (e.key === 'Escape' && mode === 'one') { mode = 'all'; focused = null; remember(); render(); }
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>
