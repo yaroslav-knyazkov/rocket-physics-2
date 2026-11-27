@@ -11,9 +11,9 @@
     {
       "id": 1,
       "name": "Core API, driven by the fx27 project",
-      "status": "planned",
-      "next": "architect: propose stack/structure for a rocket-solver core/API, informed by LaTeX models and v1 lessons",
-      "pending_approvals": ["stack/tooling choice"]
+      "status": "in_progress",
+      "next": "architect: fold D5/D6a/D6b + dynamics rollout order (point-mass -> 2D -> 3D) into architecture-stage1.md/task-stage1.md, then hand to developer starting RP-001",
+      "pending_approvals": []
     }
   ],
   "decisions": [
@@ -35,6 +35,69 @@
       "date": "2026-11-27",
       "topic": "security module timing",
       "choice": "Deferred to pre-deploy/network-exposure gate, not run now (console/local API, no secrets, no paid calls yet). User chose the recommended option.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "Core relationship: rocket-physics-2 vs fx27",
+      "choice": "rocket-physics-2 is a pure importable package (Models/Simulations/Optimizations). fx27 (D:\\Projects - Ongoing\\fx27) is the consumer: it holds project-specific run files that import this package. No project-specific code lives in rocket-physics-2 (the thing that went wrong in v1). No CLI/app shell in this repo at all, not even as a reserved extension point — run/entry-point code belongs entirely to fx27.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D1 — core language/runtime",
+      "choice": "Python 3.12 + NumPy 2.5 + SciPy 1.18 (architect's recommended option A). v1 (same language) becomes a numerical oracle via assert_allclose; matches fx27's existing material; fastest TDD loop. Integrator interface (Seam 2) written so Rust/Julia could later be a kernel swap without rewrite.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D2 — integration strategy",
+      "choice": "Option в (c): own fixed-step vectorised RK4 for production, scipy.solve_ivp kept only as a verification adapter behind one Integrator interface — the two are cross-checked on smooth problems as a correctness test.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D3 — ensemble axis in model signatures",
+      "choice": "Option а (a): vectorise from day one — every model/RHS signature takes a leading ensemble axis (N, ...), N=1 initially. Mandatory batch/scalar equivalence property test per model family.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D4 — configuration schema",
+      "choice": "Option а (a): pydantic v2 models + TOML/JSON serialization, with schema_version for golden-file reproducibility.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D5 — loaders/presentation in this repo",
+      "choice": "Option а (a, architect's recommendation): loaders/ and presentation/ live here as optional sidecars (the core works without them), returning values only, never choosing paths or rendering directly.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D6a — fx27 dependency mechanics",
+      "choice": "Option а (a, recommended): editable install (`uv pip install -e ../rocket-physics-2`) in fx27's venv for the tightest dev loop now. Revisit a pinned wheel once a core number is first quoted in a report.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "D6b — where fx27 validation tests live (modified from architect's proposal)",
+      "choice": "User overrode the dual-suite recommendation: validation tests against fx27 live only inside this repo (tests/validation/fx27/) using real fx27 reference numbers directly — no anonymized-fixture duplication. fx27 itself has no test suite of its own and will not get one.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "fx27 dynamics-model rollout order",
+      "choice": "User specified the model progression explicitly: start with point-mass (translational only, no attitude), then a 2D model, then a 3D model — refining the architect's offered 3DOF/frozen-attitude/6DOF framing into this concrete build order. Architect to translate into stage-1 ticket order.",
       "author": "user",
       "user_approved": true
     }
