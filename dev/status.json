@@ -3,15 +3,47 @@
   "description": "Second version of the rocket-physics tool, reworked and optimized: software for rocket trajectory and stability simulation, control implementation and optimization.",
   "created": "2026-11-27",
   "updated": "2026-11-27",
-  "active_modules": [],
-  "excluded_modules": [],
-  "complexity": null,
-  "current_stage": null,
-  "stages": [],
-  "decisions": [],
+  "active_modules": ["architect", "developer", "qa", "documentation"],
+  "excluded_modules": ["vision", "market-analyst", "product-manager", "concept", "product", "design-track", "frontend-developer", "security"],
+  "complexity": "simple",
+  "current_stage": 1,
+  "stages": [
+    {
+      "id": 1,
+      "name": "Core API, driven by the fx27 project",
+      "status": "planned",
+      "next": "architect: propose stack/structure for a rocket-solver core/API, informed by LaTeX models and v1 lessons",
+      "pending_approvals": ["stack/tooling choice"]
+    }
+  ],
+  "decisions": [
+    {
+      "date": "2026-11-27",
+      "topic": "Kickoff module scope — fast-track, no discovery agents",
+      "choice": "User explicitly skipped vision, market-analyst, product-manager, concept, product: \"I dont want to go over this. go straight to doing app. only architect, developer, etc.\" Active: architect, developer, qa, documentation. design-track and frontend-developer deferred until a GUI phase is added. security deferred until deploy/network exposure (user's own call). Architect works directly from dev/docs/idea-notes.md and direct user input instead of a formal brief.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "market-analyst baseline — mandatory by default, skipped here",
+      "choice": "Skipped on user's explicit request: \"no dont do market-analyst\" — personal engineering tool, not a commercial product being pitched/sold.",
+      "author": "user",
+      "user_approved": true
+    },
+    {
+      "date": "2026-11-27",
+      "topic": "security module timing",
+      "choice": "Deferred to pre-deploy/network-exposure gate, not run now (console/local API, no secrets, no paid calls yet). User chose the recommended option.",
+      "author": "user",
+      "user_approved": true
+    }
+  ],
   "deferred_decisions": [],
   "backlog_ideas": [],
-  "artifacts": {},
+  "artifacts": {
+    "idea_notes": "dev/docs/idea-notes.md"
+  },
   "archive": {
     "file": "dev/status-archive.json",
     "note": "Закрытые стадии и старые решения переносятся туда скриптом .claude/scripts/archive_status.py (dry-run по умолчанию, --apply для записи, бэкап в dev/.status-backup/)."
