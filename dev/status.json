@@ -2,7 +2,7 @@
   "project": "Rocket Physics",
   "description": "Second version of the rocket-physics tool, reworked and optimized: software for rocket trajectory and stability simulation, control implementation and optimization.",
   "created": "2026-11-27",
-  "updated": "2026-11-27",
+  "updated": "2026-11-28",
   "active_modules": ["architect", "developer", "qa", "documentation"],
   "excluded_modules": ["vision", "market-analyst", "product-manager", "concept", "product", "design-track", "frontend-developer", "security"],
   "complexity": "simple",
@@ -12,7 +12,7 @@
       "id": 1,
       "name": "Core API, driven by the fx27 project",
       "status": "in_progress",
-      "next": "architect: fold D5/D6a/D6b + dynamics rollout order (point-mass -> 2D -> 3D) into architecture-stage1.md/task-stage1.md, then hand to developer starting RP-001",
+      "next": "developer: RP-001 (repo/package skeleton) then RP-008 (M1 point-mass, gravity-turn). RP-009/010/011/012 are DEFERRED, do not start without explicit user go-ahead.",
       "pending_approvals": []
     }
   ],
@@ -105,7 +105,9 @@
   "deferred_decisions": [],
   "backlog_ideas": [],
   "artifacts": {
-    "idea_notes": "dev/docs/idea-notes.md"
+    "idea_notes": "dev/docs/idea-notes.md",
+    "architecture_stage1": "dev/docs/architecture-stage1.md",
+    "task_stage1": "dev/docs/task-stage1.md"
   },
   "archive": {
     "file": "dev/status-archive.json",
