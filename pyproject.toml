@@ -1,0 +1,63 @@
+[project]
+name = "rocket-physics"
+version = "0.1.0"
+description = "Rocket trajectory and stability simulation core: a pure, importable physics library."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Yaroslav Knyazkov", email = "yar.knaz@gmail.com" }]
+dependencies = [
+    "numpy>=2.5,<3",
+    "scipy>=1.18,<2",
+    "pydantic>=2,<3",
+]
+
+# No [project.scripts] / console_scripts entry point — this package has no CLI, ever (C5).
+# See tests/test_layering.py::test_no_console_scripts_in_pyproject.
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.11,<4"]
+dev = ["pytest>=9", "hypothesis", "ruff", "mypy"]
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+# perf/crosscheck/validation/docs are opt-in marker suites, excluded from the default run.
+# --import-mode=importlib: §7 plans many sibling tests/ subdirectories without __init__.py
+# (unit/, analytic/, properties/, regression/, crosscheck_v1/, validation/fx27/, perf/); the
+# default "prepend" mode collides the moment two of them hold a same-named test_*.py file.
+addopts = "-m 'not perf and not crosscheck and not validation and not docs' --strict-markers --import-mode=importlib"
+# importlib mode does not add directories to sys.path (that's the point); tests/tolerances.py
+# is a shared module every test file imports directly (`from tolerances import ...`), so its
+# directory is added explicitly here rather than falling back to prepend-mode sys.path tricks.
+pythonpath = ["tests"]
+markers = [
+    "perf: performance budget tests (tests/perf/), excluded by default",
+    "crosscheck: differential tests against rocket-physics v1 (tests/crosscheck_v1/), excluded by default",
+    "validation: real fx27 reference-data validation tests (tests/validation/fx27/), excluded by default",
+    "docs: LaTeX <-> code label consistency tests, excluded by default",
+]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+# This repo also carries the agent-kit's own tooling (.claude/, dev/) alongside the package;
+# RP-001's "ruff check / ruff format --check pass" gate is scoped to the package and its tests.
+extend-exclude = [".claude", "dev"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "TID"]
+# TID = flake8-tidy-imports: used to ban L5 (loaders/presentation, matplotlib, requests) imports
+# from L0-L4 modules once Seam 4 banned-API rules are configured (RP-002).
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["rocket_physics"]
+ignore_missing_imports = true
+exclude = "^(\\.claude|dev)/"
+# Advisory at this stage (§10): not wired into any CI gate yet.

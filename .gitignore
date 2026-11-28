@@ -12,3 +12,15 @@ dev/.status-backup/
 dev/.docs-backup/
 .playwright-mcp/
 dev/concept/**/shots/
+
+# --- Python / rocket_physics package ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
